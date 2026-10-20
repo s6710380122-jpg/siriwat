@@ -1,0 +1,149 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 1000 },
+        "role": { "type": "string", "enum": ["member", "moderator", "admin"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "status"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Privileged administrator document",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "role": { "type": "string", "enum": ["admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Resource": {
+      "title": "Resource",
+      "description": "Educational resource item in the library",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "category": { "type": "string", "maxLength": 100 },
+        "gradeLevel": { "type": "string", "maxLength": 100 },
+        "mediaType": { "type": "string", "enum": ["pdf", "video", "website", "slide", "document", "other"] },
+        "url": { "type": "string", "maxLength": 2000 },
+        "attachmentUrl": { "type": "string", "maxLength": 5000000 },
+        "attachmentName": { "type": "string", "maxLength": 200 },
+        "tags": { "type": "array" },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 100 },
+        "authorEmail": { "type": "string", "maxLength": 256 },
+        "isPublished": { "type": "boolean" },
+        "viewsCount": { "type": "number" },
+        "favoritesCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "category", "gradeLevel", "mediaType", "authorId", "authorName", "isPublished"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "User bookmarked resource",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "resourceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "resourceId"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "User report against inappropriate or broken media",
+      "type": "object",
+      "properties": {
+        "resourceId": { "type": "string", "maxLength": 128 },
+        "resourceTitle": { "type": "string", "maxLength": 200 },
+        "reporterId": { "type": "string", "maxLength": 128 },
+        "reporterEmail": { "type": "string", "maxLength": 256 },
+        "reason": { "type": "string", "enum": ["broken_link", "copyright", "inappropriate", "inaccurate", "spam", "other"] },
+        "details": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "dismissed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "format": "date-time" },
+        "resolvedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["resourceId", "resourceTitle", "reporterId", "reason", "status"]
+    },
+    "ModerationLog": {
+      "title": "ModerationLog",
+      "description": "Audit trail of admin actions",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "maxLength": 100 },
+        "targetType": { "type": "string", "enum": ["resource", "user", "report", "settings"] },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "performedBy": { "type": "string", "maxLength": 128 },
+        "performedByName": { "type": "string", "maxLength": 100 },
+        "reason": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "targetType", "targetId", "performedBy", "performedByName"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global website configuration and taxonomies",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string", "maxLength": 100 },
+        "siteDescription": { "type": "string", "maxLength": 500 },
+        "announcement": { "type": "string", "maxLength": 500 },
+        "categories": { "type": "array" },
+        "gradeLevels": { "type": "array" },
+        "mediaTypes": { "type": "array" },
+        "logoUrl": { "type": "string", "maxLength": 2000 },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["siteName", "categories", "gradeLevels", "mediaTypes"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile with role, email, and account status"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Trusted admin whitelist records"
+    },
+    "/resources/{resourceId}": {
+      "schema": { "$ref": "#/entities/Resource" },
+      "description": "Educational resource documents"
+    },
+    "/favorites/{favoriteId}": {
+      "schema": { "$ref": "#/entities/Favorite" },
+      "description": "User bookmarked resources mapped by userId_resourceId"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Content reports submitted by users"
+    },
+    "/moderationLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ModerationLog" },
+      "description": "Audit logs for moderation actions"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Application settings including site branding and categories"
+    }
+  }
+}

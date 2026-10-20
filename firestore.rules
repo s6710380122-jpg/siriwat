@@ -1,0 +1,201 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all unknown paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ----------------------------------------------------
+    // Global Helper Functions
+    // ----------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && request.auth.token.email == 's6710380122@pkru.ac.th';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isModerator() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['moderator', 'admin']
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'status']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'role', 'status', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() <= 256 &&
+        data.displayName is string && data.displayName.size() <= 100 &&
+        data.role in ['member', 'moderator', 'admin'] &&
+        data.status in ['active', 'suspended'];
+    }
+
+    function isValidResource(data) {
+      return data.keys().hasAll(['title', 'description', 'category', 'gradeLevel', 'mediaType', 'authorId', 'authorName', 'isPublished']) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 200 &&
+        data.description is string && data.description.size() <= 3000 &&
+        data.category is string && data.category.size() <= 100 &&
+        data.gradeLevel is string && data.gradeLevel.size() <= 100 &&
+        data.mediaType in ['pdf', 'video', 'website', 'slide', 'document', 'other'] &&
+        data.authorId is string && data.authorId.size() <= 128 &&
+        data.authorName is string && data.authorName.size() <= 100 &&
+        data.isPublished is bool &&
+        (!('tags' in data) || (data.tags is list && data.tags.size() <= 15));
+    }
+
+    // ----------------------------------------------------
+    // Collection: Admins
+    // ----------------------------------------------------
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isAdmin();
+      allow list: if isAdmin();
+      allow write: if isValidId(adminId) && isBootstrappedAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Users
+    // ----------------------------------------------------
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isModerator());
+      allow list: if isModerator();
+
+      allow create: if isValidId(userId) && isSignedIn() &&
+        (isOwner(userId) || isAdmin()) &&
+        isValidUser(request.resource.data) &&
+        request.resource.data.uid == userId &&
+        (
+          isAdmin() ||
+          (
+            request.resource.data.status == 'active' &&
+            request.resource.data.role == (request.auth.token.email == 's6710380122@pkru.ac.th' ? 'admin' : 'member')
+          )
+        );
+
+      allow update: if isValidId(userId) && isSignedIn() && (
+        isAdmin() ||
+        (
+          isOwner(userId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']) &&
+          request.resource.data.displayName is string && request.resource.data.displayName.size() <= 100
+        )
+      );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Resources
+    // ----------------------------------------------------
+    match /resources/{resourceId} {
+      allow get: if isValidId(resourceId) && (
+        resource.data.isPublished == true ||
+        (isSignedIn() && (resource.data.authorId == request.auth.uid || isModerator()))
+      );
+
+      allow list: if true;
+
+      allow create: if isValidId(resourceId) && isSignedIn() &&
+        isValidResource(request.resource.data) &&
+        request.resource.data.authorId == request.auth.uid;
+
+      allow update: if isValidId(resourceId) && isSignedIn() && (
+        // Admin or moderator can update publishing state or content
+        isModerator() ||
+        // Author can update details but cannot modify authorId or createdAt
+        (
+          resource.data.authorId == request.auth.uid &&
+          isValidResource(request.resource.data) &&
+          request.resource.data.authorId == resource.data.authorId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'title', 'description', 'category', 'gradeLevel', 'mediaType',
+            'url', 'attachmentUrl', 'attachmentName', 'tags', 'isPublished', 'updatedAt'
+          ])
+        ) ||
+        // Counter increments for viewsCount or favoritesCount
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount', 'favoritesCount'])
+        )
+      );
+
+      allow delete: if isValidId(resourceId) && isSignedIn() && (
+        resource.data.authorId == request.auth.uid ||
+        isModerator()
+      );
+    }
+
+    // ----------------------------------------------------
+    // Collection: Favorites
+    // ----------------------------------------------------
+    match /favorites/{favoriteId} {
+      allow get: if isValidId(favoriteId) && isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isValidId(favoriteId) && isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.resourceId is string;
+
+      allow delete: if isValidId(favoriteId) && isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ----------------------------------------------------
+    // Collection: Reports
+    // ----------------------------------------------------
+    match /reports/{reportId} {
+      allow get: if isValidId(reportId) && isSignedIn() && (
+        isModerator() || resource.data.reporterId == request.auth.uid
+      );
+      allow list: if isModerator();
+
+      allow create: if isValidId(reportId) && isSignedIn() &&
+        request.resource.data.reporterId == request.auth.uid &&
+        request.resource.data.keys().hasAll(['resourceId', 'resourceTitle', 'reporterId', 'reason', 'status']) &&
+        request.resource.data.reason in ['broken_link', 'copyright', 'inappropriate', 'inaccurate', 'spam', 'other'] &&
+        request.resource.data.status == 'pending';
+
+      allow update: if isValidId(reportId) && isModerator() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy']);
+
+      allow delete: if isValidId(reportId) && isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Moderation Logs
+    // ----------------------------------------------------
+    match /moderationLogs/{logId} {
+      allow get, list: if isModerator();
+      allow create: if isValidId(logId) && isModerator() &&
+        request.resource.data.performedBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ----------------------------------------------------
+    // Collection: Settings
+    // ----------------------------------------------------
+    match /settings/{settingId} {
+      allow get, list: if true;
+      allow write: if isValidId(settingId) && isAdmin();
+    }
+  }
+}

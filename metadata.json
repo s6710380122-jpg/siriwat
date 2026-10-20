@@ -1,0 +1,6 @@
+{
+  "name": "EduHub - ระบบคลังความรู้และสื่อการเรียนรู้ออนไลน์",
+  "description": "ระบบคลังความรู้และสื่อการเรียนรู้ออนไลน์ จัดการสื่อการสอน กรองหมวดหมู่ ระบบสมาชิก 3 ระดับ และแผงควบคุมผู้ดูแลระบบ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
